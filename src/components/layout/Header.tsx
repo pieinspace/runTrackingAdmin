@@ -1,5 +1,4 @@
-import { Bell, Search, User } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,17 +19,7 @@ const Header = ({ adminName, onLogout, sidebarCollapsed = false }: HeaderProps) 
   const navigate = useNavigate();
   return (
     <header className="sticky top-0 z-30 h-16 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-full items-center justify-between px-6">
-        {/* Search */}
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Cari pelari, ID, atau aktivitas..."
-            className="pl-10 bg-muted/50 border-0 focus-visible:ring-1"
-          />
-        </div>
-
+      <div className="flex h-full items-center justify-end px-6">
         {/* Right side */}
         <div className="flex items-center gap-4">
           {/* Notifications */}
