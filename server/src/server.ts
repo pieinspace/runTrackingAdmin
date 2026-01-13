@@ -1,8 +1,11 @@
-import app from './app';
+import "dotenv/config";
+
+import app from "./app";
+import { dbHealthcheck } from "./db";
 
 const port = process.env.PORT || 4000;
 
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Server listening on http://localhost:${port}`);
-});
+(async () => {
+  await dbHealthcheck();
+  app.listen(port, () => console.log(`Server listening on http://localhost:${port}`));
+})();
