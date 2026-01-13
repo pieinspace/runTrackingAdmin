@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -26,7 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MOCK_RUNNERS } from "@/lib/mockRunners";
 
 interface TargetRunner {
   id: string;
@@ -35,43 +34,132 @@ interface TargetRunner {
   distance: number;
   time: string;
   pace: string;
-  achievedDate: string;
+  achievedDate: string; // untuk ditampilkan (format Indonesia)
+  achievedDateRaw: string; // YYYY-MM-DD untuk filter
   validationStatus: "validated" | "pending";
 }
 
-const mockTargetRunners: TargetRunner[] = MOCK_RUNNERS.filter(
-  (r) => r.distance && r.achievedDate
-).map((r) => ({
-  id: r.id,
-  name: r.name,
-  rank: r.rank,
-  distance: r.distance || 0,
-  time: r.time || "0:00:00",
-  pace: r.pace || "0:00/km",
-  achievedDate: r.achievedDate || "",
-  validationStatus: (r.validationStatus as "validated" | "pending") || "pending",
-}));
+type ApiTargetRow = {
+  id: string; // runner_id
+  name: string;
+  rank: string;
+  distance_km: number;
+  time_taken: string | null;
+  pace: string | null;
+  achieved_date: string; // YYYY-MM-DD
+  validation_status: "validated" | "pending";
+};
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString?.() ||
+  "http://localhost:4000";
+
+const formatDateID = (yyyyMmDd: string) => {
+  // input: "2026-01-09"
+  const d = new Date(`${yyyyMmDd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return yyyyMmDd;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
+const isInPeriod = (yyyyMmDd: string, period: string) => {
+  if (period === "all") return true;
+
+  const date = new Date(`${yyyyMmDd}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return true;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (period === "today") {
+    return date >= startOfToday;
+  }
+
+  if (period === "week") {
+    // 7 hari terakhir termasuk hari ini
+    const start = new Date(startOfToday);
+    start.setDate(start.getDate() - 6);
+    return date >= start;
+  }
+
+  if (period === "month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return date >= start;
+  }
+
+  return true;
+};
 
 const Target14KM = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
 
-  const filteredRunners = mockTargetRunners.filter((runner) => {
-    const matchesSearch =
-      runner.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      runner.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || runner.validationStatus === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const [targetRunners, setTargetRunners] = useState<TargetRunner[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const validatedCount = mockTargetRunners.filter(
-    (r) => r.validationStatus === "validated"
-  ).length;
-  const pendingCount = mockTargetRunners.filter(
-    (r) => r.validationStatus === "pending"
-  ).length;
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/targets/14km`);
+        const json = await res.json();
+        const data: ApiTargetRow[] = Array.isArray(json?.data) ? json.data : [];
+
+        const mapped: TargetRunner[] = data.map((r) => ({
+          id: r.id,
+          name: r.name,
+          rank: r.rank,
+          distance: Number(r.distance_km ?? 0),
+          time: r.time_taken ?? "0:00:00",
+          pace: r.pace ?? "0:00/km",
+          achievedDate: formatDateID(r.achieved_date),
+          achievedDateRaw: r.achieved_date,
+          validationStatus: r.validation_status,
+        }));
+
+        if (!cancelled) setTargetRunners(mapped);
+      } catch (e) {
+        if (!cancelled) setTargetRunners([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredRunners = useMemo(() => {
+    return targetRunners.filter((runner) => {
+      const matchesSearch =
+        runner.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        runner.id.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "all" || runner.validationStatus === statusFilter;
+
+      const matchesDate = isInPeriod(runner.achievedDateRaw, dateFilter);
+
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [targetRunners, searchQuery, statusFilter, dateFilter]);
+
+  const validatedCount = useMemo(
+    () => targetRunners.filter((r) => r.validationStatus === "validated").length,
+    [targetRunners]
+  );
+  const pendingCount = useMemo(
+    () => targetRunners.filter((r) => r.validationStatus === "pending").length,
+    [targetRunners]
+  );
 
   return (
     <div className="space-y-6">
@@ -97,7 +185,7 @@ const Target14KM = () => {
             Total Tercapai
           </p>
           <p className="text-2xl font-bold text-foreground">
-            {mockTargetRunners.length}
+            {targetRunners.length}
           </p>
         </div>
         <div className="stat-card">
@@ -137,6 +225,7 @@ const Target14KM = () => {
               <SelectItem value="pending">Pending</SelectItem>
             </SelectContent>
           </Select>
+
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Periode" />
@@ -148,6 +237,7 @@ const Target14KM = () => {
               <SelectItem value="month">Bulan Ini</SelectItem>
             </SelectContent>
           </Select>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
@@ -185,39 +275,60 @@ const Target14KM = () => {
                 <th className="text-right">Aksi</th>
               </tr>
             </thead>
+
             <tbody>
-              {filteredRunners.map((runner) => (
-                <tr key={runner.id}>
-                  <td className="font-medium text-sm">{runner.rank}</td>
-                  <td className="font-medium">{runner.name}</td>
-                  <td className="font-semibold text-primary">
-                    {runner.distance.toFixed(2)} km
-                  </td>
-                  <td>{runner.time}</td>
-                  <td>{runner.pace}</td>
-                  <td className="text-muted-foreground">{runner.achievedDate}</td>
-                  <td>
-                    {runner.validationStatus === "validated" ? (
-                      <span className="badge-success">
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        Tervalidasi
-                      </span>
-                    ) : (
-                      <span className="badge-pending">
-                        <Clock className="mr-1 h-3 w-3" />
-                        Pending
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-right">
-                    <Link to={`/pelari/${runner.id}`}>
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </Link>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
+                    Loading...
                   </td>
                 </tr>
-              ))}
+              ) : filteredRunners.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
+                    Tidak ada data.
+                  </td>
+                </tr>
+              ) : (
+                filteredRunners.map((runner) => (
+                  <tr key={`${runner.id}-${runner.achievedDateRaw}`}>
+                    <td className="font-medium text-sm">{runner.rank}</td>
+                    <td className="font-medium">{runner.name}</td>
+                    <td className="font-semibold text-primary">
+                      {runner.distance.toFixed(2)} km
+                    </td>
+                    <td>{runner.time}</td>
+                    <td>{runner.pace}</td>
+                    <td className="text-muted-foreground">{runner.achievedDate}</td>
+                    <td>
+                      {runner.validationStatus === "validated" ? (
+                        <span className="badge-success">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Tervalidasi
+                        </span>
+                      ) : (
+                        <span className="badge-pending">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <Link to={`/pelari/${runner.id}`}>
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

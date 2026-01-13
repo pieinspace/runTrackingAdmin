@@ -35,9 +35,8 @@ type ApiRunner = {
   id: string;
   name: string;
   rank?: string | null;
-  status?: string | null; // validated | pending | dll
 
-  // bisa camelCase atau snake_case (kita handle dua-duanya)
+  // bisa camelCase atau snake_case
   totalDistance?: number;
   totalSessions?: number;
   total_distance?: number;
@@ -51,9 +50,10 @@ const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL?.toString?.() ||
   "http://localhost:4000";
 
-const toTargetStatus = (status?: string | null): RunnerUI["targetStatus"] => {
-  if (status === "validated") return "achieved";
-  if (status === "pending") return "in_progress";
+// ✅ status berdasarkan totalDistance (3 level)
+const toTargetStatus = (totalDistance: number): RunnerUI["targetStatus"] => {
+  if (totalDistance >= 14) return "achieved";
+  if (totalDistance >= 1) return "in_progress";
   return "not_started";
 };
 
@@ -79,7 +79,7 @@ const makeEmail = (name: string, rank: string) => {
 
   if (!parts.length) return "-";
 
-  // Kalau nama diawali pangkat (contoh: "Mayor Budi Hartono")
+  // Jika name diawali pangkat (contoh: "Mayor Budi Hartono"), ambil kata setelah pangkat sebagai nama depan
   const firstWord = (parts[0] || "").toLowerCase();
   const secondWord = (parts[1] || "").toLowerCase();
 
@@ -113,7 +113,9 @@ const getStatusBadge = (status: RunnerUI["targetStatus"]) => {
 
 const DataPelari = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | RunnerUI["targetStatus"]
+  >("all");
 
   const [runners, setRunners] = useState<RunnerUI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,7 +146,6 @@ const DataPelari = () => {
               : 0;
 
           const createdAt = x.createdAt ?? x.created_at ?? null;
-
           const rank = x.rank ?? "-";
 
           return {
@@ -154,7 +155,7 @@ const DataPelari = () => {
             email: makeEmail(x.name, rank),
             totalSessions,
             totalDistance,
-            targetStatus: toTargetStatus(x.status),
+            targetStatus: toTargetStatus(totalDistance),
             joinDate: formatJoinDate(createdAt),
           };
         });
@@ -182,8 +183,7 @@ const DataPelari = () => {
         runner.id.toLowerCase().includes(q) ||
         runner.email.toLowerCase().includes(q);
 
-      const matchesStatus =
-        statusFilter === "all" || runner.targetStatus === statusFilter;
+      const matchesStatus = statusFilter === "all" || runner.targetStatus === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -212,7 +212,10 @@ const DataPelari = () => {
         </div>
 
         <div className="flex gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as any)}
+          >
             <SelectTrigger className="w-[180px]">
               <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Status Target" />
@@ -300,7 +303,7 @@ const DataPelari = () => {
                     <td className="px-5 py-4">{runner.totalSessions}</td>
 
                     <td className="px-5 py-4">
-                      {runner.totalDistance.toFixed(1)} km
+                      {runner.totalDistance.toFixed(2)} km
                     </td>
 
                     <td className="px-5 py-4">
@@ -325,7 +328,7 @@ const DataPelari = () => {
           </table>
         </div>
 
-        {/* Pagination (tetap seperti gaya kamu) */}
+        {/* Pagination (UI tetap) */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-border">
           <p className="text-sm text-muted-foreground">
             Menampilkan {filteredRunners.length} dari {runners.length} pelari
