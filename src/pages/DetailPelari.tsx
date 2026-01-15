@@ -1,5 +1,14 @@
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Mail, Calendar, Target, Clock, TrendingUp, Activity } from "lucide-react";
+import {
+  ArrowLeft,
+  Mail,
+  Calendar,
+  Target,
+  Clock,
+  TrendingUp,
+  Activity,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   LineChart,
@@ -10,44 +19,227 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { MOCK_RUNNERS } from "@/lib/mockRunners";
 
-const progressData = [
-  { week: "W1", distance: 25 },
-  { week: "W2", distance: 35 },
-  { week: "W3", distance: 42 },
-  { week: "W4", distance: 58 },
-  { week: "W5", distance: 65 },
-  { week: "W6", distance: 62 },
-];
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString?.() ||
+  "http://localhost:4000";
 
-const sessionHistory = [
-  { date: "09 Jan 2026", distance: 14.52, time: "1:23:45", pace: "5:45/km", targetMet: true },
-  { date: "07 Jan 2026", distance: 8.25, time: "0:48:12", pace: "5:50/km", targetMet: false },
-  { date: "05 Jan 2026", distance: 10.12, time: "1:01:05", pace: "6:02/km", targetMet: false },
-  { date: "03 Jan 2026", distance: 6.80, time: "0:42:30", pace: "6:15/km", targetMet: false },
-  { date: "01 Jan 2026", distance: 12.35, time: "1:15:20", pace: "6:05/km", targetMet: false },
-];
+type ApiRunner = {
+  id: string;
+  name: string;
+  rank: string | null;
+  status: string | null;
+  total_distance?: number;
+  total_sessions?: number;
+  totalDistance?: number;
+  totalSessions?: number;
+  created_at?: string;
+  createdAt?: string;
+};
+
+type ApiTarget14 = {
+  id: string; // runner_id dari API targets.ts kamu (t.runner_id AS id)
+  name: string;
+  rank: string;
+  distance_km: number;
+  time_taken: string | null;
+  pace: string | null;
+  achieved_date: string; // YYYY-MM-DD
+  validation_status: "validated" | "pending";
+};
+
+const formatDateID = (yyyyMmDd: string) => {
+  const d = new Date(`${yyyyMmDd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return yyyyMmDd;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
+const makeEmail = (name: string, rank: string) => {
+  const rankLower = (rank || "").toLowerCase().replace(/[^a-z]/g, "");
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .map((p) => p.replace(/[^A-Za-z]/g, ""))
+    .filter(Boolean);
+
+  if (!parts.length) return "-";
+
+  const firstWord = (parts[0] || "").toLowerCase();
+  const secondWord = (parts[1] || "").toLowerCase();
+
+  const firstName =
+    rankLower && firstWord === rankLower && secondWord ? secondWord : firstWord;
+
+  if (!rankLower || !firstName) return "-";
+  return `${rankLower}.${firstName}@tni.mil.id`;
+};
+
+const calcTargetAchieved = (totalDistance: number) => totalDistance >= 14;
 
 const DetailPelari = () => {
   const { id } = useParams();
+  const runnerId = id || "";
 
-  // Get runner data from mock data
-  const runnerData = MOCK_RUNNERS.find((r) => r.id === id) || MOCK_RUNNERS[0];
-  
-  const runner = {
-    id: runnerData.id,
-    name: runnerData.name,
-    rank: runnerData.rank,
-    email: runnerData.email,
-    joinDate: runnerData.joinDate,
-    totalDistance: runnerData.totalDistance,
-    totalTime: "16:45:22",
-    avgPace: runnerData.pace || "5:52/km",
-    totalSessions: runnerData.totalSessions,
-    targetAchieved: runnerData.targetStatus === "achieved",
-    achievedDate: runnerData.achievedDate || "N/A",
-  };
+  const [runner, setRunner] = useState<{
+    id: string;
+    name: string;
+    rank: string;
+    email: string;
+    joinDate: string;
+    totalDistance: number;
+    totalTime: string;
+    avgPace: string;
+    totalSessions: number;
+    targetAchieved: boolean;
+    achievedDate: string;
+  } | null>(null);
+
+  const [sessionHistory, setSessionHistory] = useState<
+    { date: string; distance: number; time: string; pace: string; targetMet: boolean }[]
+  >([]);
+
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setErrorMsg(null);
+
+      try {
+        // 1) ambil semua runners, cari id
+        const runnersRes = await fetch(`${API_BASE}/api/runners`);
+        const runnersJson = await runnersRes.json();
+        const runners: ApiRunner[] = Array.isArray(runnersJson?.data)
+          ? runnersJson.data
+          : [];
+
+        const r = runners.find((x) => x.id === runnerId);
+        if (!r) {
+          throw new Error(`Pelari dengan ID ${runnerId} tidak ditemukan.`);
+        }
+
+        const totalDistance =
+          typeof r.totalDistance === "number"
+            ? r.totalDistance
+            : typeof r.total_distance === "number"
+            ? r.total_distance
+            : 0;
+
+        const totalSessions =
+          typeof r.totalSessions === "number"
+            ? r.totalSessions
+            : typeof r.total_sessions === "number"
+            ? r.total_sessions
+            : 0;
+
+        const createdAt = (r.createdAt ?? r.created_at ?? "").toString();
+        const joinDate =
+          createdAt && createdAt.length >= 10 ? formatDateID(createdAt.slice(0, 10)) : "-";
+
+        // 2) ambil target 14km untuk jadi history (kalau ada record)
+        const targetRes = await fetch(`${API_BASE}/api/targets/14km`);
+        const targetJson = await targetRes.json();
+        const targets: ApiTarget14[] = Array.isArray(targetJson?.data)
+          ? targetJson.data
+          : [];
+
+        const myTargets = targets
+          .filter((x) => x.id === runnerId)
+          .sort((a, b) => (a.achieved_date < b.achieved_date ? 1 : -1));
+
+        const history = myTargets.map((x) => ({
+          date: formatDateID(x.achieved_date),
+          distance: Number(x.distance_km ?? 0),
+          time: x.time_taken ?? "-",
+          pace: x.pace ?? "-",
+          targetMet: Number(x.distance_km ?? 0) >= 14,
+        }));
+
+        // ambil achievedDate terbaru dari history (kalau ada)
+        const achievedDate = myTargets[0]?.achieved_date
+          ? formatDateID(myTargets[0].achieved_date)
+          : "N/A";
+
+        // avg pace & total time (karena belum ada table sessions lengkap, fallback)
+        const avgPace = myTargets[0]?.pace ?? "-";
+        const totalTime = myTargets[0]?.time_taken ?? "-";
+
+        const rank = r.rank ?? "-";
+        const name = r.name;
+
+        const payload = {
+          id: r.id,
+          name,
+          rank,
+          email: makeEmail(name, rank),
+          joinDate,
+          totalDistance,
+          totalTime,
+          avgPace,
+          totalSessions,
+          targetAchieved: calcTargetAchieved(totalDistance),
+          achievedDate,
+        };
+
+        if (!cancelled) {
+          setRunner(payload);
+          setSessionHistory(history);
+        }
+      } catch (e: any) {
+        if (!cancelled) setErrorMsg(e?.message || "Gagal memuat data pelari.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    if (runnerId) load();
+    return () => {
+      cancelled = true;
+    };
+  }, [runnerId]);
+
+  // Progress chart: dibuat dari data asli yang tersedia (riwayat target_14km untuk runner ini)
+  // Kalau belum ada, chart tetap tampil tapi kosong.
+  const progressData = useMemo(() => {
+    // pakai maksimal 6 data paling akhir sebagai W1..W6
+    const latest = [...sessionHistory].reverse().slice(-6); // oldest -> newest
+    return latest.map((s, idx) => ({
+      week: `W${idx + 1}`,
+      distance: s.distance,
+    }));
+  }, [sessionHistory]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (errorMsg || !runner) {
+    return (
+      <div className="space-y-6">
+        <Link to="/pelari">
+          <Button variant="ghost" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Kembali ke Data Pelari
+          </Button>
+        </Link>
+
+        <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+          <p className="text-sm text-destructive">{errorMsg || "Data tidak ditemukan."}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -154,13 +346,8 @@ const DetailPelari = () => {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={progressData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(210, 15%, 90%)" />
-                <XAxis
-                  dataKey="week"
-                  tick={{ fill: "hsl(210, 10%, 45%)", fontSize: 12 }}
-                />
-                <YAxis
-                  tick={{ fill: "hsl(210, 10%, 45%)", fontSize: 12 }}
-                />
+                <XAxis dataKey="week" tick={{ fill: "hsl(210, 10%, 45%)", fontSize: 12 }} />
+                <YAxis tick={{ fill: "hsl(210, 10%, 45%)", fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "hsl(0, 0%, 100%)",
@@ -179,37 +366,47 @@ const DetailPelari = () => {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          {progressData.length === 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Belum ada data sesi di database untuk grafik (isi tabel target_14km atau buat tabel run_sessions).
+            </p>
+          )}
         </div>
 
         {/* Session History */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-5">
-          <h3 className="font-semibold text-foreground mb-4">
-            Riwayat Sesi Lari
-          </h3>
-          <div className="space-y-3">
-            {sessionHistory.map((session, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`h-2 w-2 rounded-full ${
-                      session.targetMet ? "bg-success" : "bg-muted-foreground"
-                    }`}
-                  />
-                  <div>
-                    <p className="font-medium text-sm">{session.distance} km</p>
-                    <p className="text-xs text-muted-foreground">{session.date}</p>
+          <h3 className="font-semibold text-foreground mb-4">Riwayat Sesi Lari</h3>
+
+          {sessionHistory.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Belum ada riwayat sesi di database untuk pelari ini.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sessionHistory.map((session, index) => (
+                <div
+                  key={`${session.date}-${index}`}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`h-2 w-2 rounded-full ${
+                        session.targetMet ? "bg-success" : "bg-muted-foreground"
+                      }`}
+                    />
+                    <div>
+                      <p className="font-medium text-sm">{session.distance} km</p>
+                      <p className="text-xs text-muted-foreground">{session.date}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">{session.time}</p>
+                    <p className="text-xs text-muted-foreground">{session.pace}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">{session.time}</p>
-                  <p className="text-xs text-muted-foreground">{session.pace}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
