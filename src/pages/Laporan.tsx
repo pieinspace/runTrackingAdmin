@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, FileSpreadsheet, BarChart3, Users, Target } from "lucide-react";
+import { FileText, FileSpreadsheet, BarChart3, Users, Target, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -88,6 +89,7 @@ const formatDateID = (yyyyMmDd: string) => {
 
 const Laporan = () => {
   const [selectedReport, setSelectedReport] = useState<ReportTypeId | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -167,6 +169,20 @@ const Laporan = () => {
     };
   }, [selectedReport]);
 
+  /* ================== FILTER DATA BERDASARKAN SEARCH ================== */
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) return rows;
+    
+    const query = searchQuery.toLowerCase();
+    return rows.filter((row) => {
+      return (
+        row.nama.toLowerCase().includes(query) ||
+        row.id.toLowerCase().includes(query) ||
+        row.pangkat.toLowerCase().includes(query)
+      );
+    });
+  }, [rows, searchQuery]);
+
   /* ================== GENERATE PDF ================== */
   const generatePDF = () => {
     const element = document.getElementById("report-preview");
@@ -189,7 +205,7 @@ const Laporan = () => {
   const generateExcel = () => {
     if (!selectedReport) return;
 
-    const excelData = rows.map((r) => ({
+    const excelData = filteredRows.map((r) => ({
       No: r.no,
       "ID Pelari": r.id,
       Nama: r.nama,
@@ -287,6 +303,26 @@ const Laporan = () => {
         })}
       </div>
 
+      {/* ================= SEARCH BAR ================= */}
+      {selectedReport && (
+        <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari nama, ID, atau pangkat..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Menampilkan {filteredRows.length} dari {rows.length} data
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= PREVIEW & DOWNLOAD ================= */}
       {selectedReport && (
         <>
@@ -332,16 +368,16 @@ const Laporan = () => {
                         Loading...
                       </td>
                     </tr>
-                  ) : rows.length === 0 ? (
+                  ) : filteredRows.length === 0 ? (
                     <tr>
                       <td className="border border-black p-2 text-center" colSpan={9}>
-                        Tidak ada data.
+                        {searchQuery ? "Tidak ada data yang sesuai dengan pencarian." : "Tidak ada data."}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    filteredRows.map((row, idx) => (
                       <tr key={`${row.id}-${row.no}`}>
-                        <td className="border border-black p-1 text-center">{row.no}</td>
+                        <td className="border border-black p-1 text-center">{idx + 1}</td>
                         <td className="border border-black p-1">{row.id}</td>
                         <td className="border border-black p-1">{row.nama}</td>
                         <td className="border border-black p-1">{row.pangkat}</td>
@@ -360,11 +396,21 @@ const Laporan = () => {
 
           {/* ----------- TOMBOL DOWNLOAD ----------- */}
           <div className="flex justify-end gap-3 mt-4">
-            <Button variant="outline" className="gap-2" onClick={generatePDF} disabled={loading || rows.length === 0}>
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={generatePDF} 
+              disabled={loading || filteredRows.length === 0}
+            >
               <FileText className="h-4 w-4" />
               Download PDF
             </Button>
-            <Button variant="default" className="gap-2" onClick={generateExcel} disabled={loading || rows.length === 0}>
+            <Button 
+              variant="default" 
+              className="gap-2" 
+              onClick={generateExcel} 
+              disabled={loading || filteredRows.length === 0}
+            >
               <FileSpreadsheet className="h-4 w-4" />
               Download Excel
             </Button>

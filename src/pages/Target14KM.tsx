@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
-  Filter,
   Download,
   Eye,
   CheckCircle2,
@@ -10,6 +9,7 @@ import {
   FileSpreadsheet,
   FileText,
   Trophy,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,60 +202,81 @@ const Target14KM = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari nama atau ID pelari..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <div className="flex gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Status Validasi" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Status</SelectItem>
-              <SelectItem value="validated">Tervalidasi</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Filters - Grid Layout sama seperti Data Pelari */}
+      <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+        <div className="grid grid-cols-12 gap-4">
+          {/* Search Nama */}
+          <div className="col-span-12 sm:col-span-3">
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Cari Nama
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari nama pelari..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Periode" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Waktu</SelectItem>
-              <SelectItem value="today">Hari Ini</SelectItem>
-              <SelectItem value="week">Minggu Ini</SelectItem>
-              <SelectItem value="month">Bulan Ini</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Filter Status Validasi */}
+          <div className="col-span-12 sm:col-span-3">
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Status Validasi
+            </label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Semua Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="validated">Tervalidasi</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem>
-                <FileText className="mr-2 h-4 w-4" />
-                Export PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Export Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Filter Periode Waktu */}
+          <div className="col-span-12 sm:col-span-4">
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Periode Waktu
+            </label>
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Semua Waktu" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Waktu</SelectItem>
+                <SelectItem value="today">Hari Ini</SelectItem>
+                <SelectItem value="week">Minggu Ini</SelectItem>
+                <SelectItem value="month">Bulan Ini</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Export Button */}
+          <div className="col-span-12 sm:col-span-2 flex items-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="w-full">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
