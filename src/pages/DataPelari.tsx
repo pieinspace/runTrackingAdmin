@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Search, Download, ChevronDown, FileText, FileSpreadsheet } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Search, Download, ChevronDown, FileText, FileSpreadsheet, Eye, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,376 +21,427 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL?.toString?.() ||
+  "http://localhost:4000";
+
+interface ApiRunner {
+  id: string;
+  name: string;
+  rank: string | null;
+  totalDistance?: number;
+  total_distance?: number;
+  totalSessions?: number;
+  total_sessions?: number;
+  created_at?: string;
+  createdAt?: string;
+}
+
+interface ApiTarget14 {
+  id: string;
+  distance_km: number;
+  validation_status: "validated" | "pending";
+}
 
 interface Pelari {
-  id: number;
+  id: string;
   pangkat: string;
   nama: string;
   email: string;
-  kesatuan: string;
-  subdis: string;
+  kesatuan: string; // Not in API yet, use placeholder
+  subdis: string;   // Not in API yet, use placeholder
   totalSesi: number;
   totalJarak: number;
   statusTarget: string;
   bergabung: string;
 }
 
+const formatDateID = (isoString: string) => {
+  if (!isoString) return "-";
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
+const makeEmail = (name: string, rank: string) => {
+  const rankLower = (rank || "").toLowerCase().replace(/[^a-z]/g, "");
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .map((p) => p.replace(/[^A-Za-z]/g, ""))
+    .filter(Boolean);
+
+  if (!parts.length) return "-";
+
+  const firstWord = (parts[0] || "").toLowerCase();
+  const secondWord = (parts[1] || "").toLowerCase();
+
+  const firstName =
+    rankLower && firstWord === rankLower && secondWord ? secondWord : firstWord;
+
+  if (!rankLower || !firstName) return "-";
+  return `${rankLower}.${firstName}@tni.mil.id`;
+};
+
 const DataPelari = () => {
+  const [loading, setLoading] = useState(true);
+  const [pelariData, setPelariData] = useState<Pelari[]>([]);
+
   const [searchNama, setSearchNama] = useState('');
   const [filterKesatuan, setFilterKesatuan] = useState('');
   const [filterSubdis, setFilterSubdis] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [openKesatuan, setOpenKesatuan] = useState(false);
   const [openSubdis, setOpenSubdis] = useState(false);
 
-  // Data dummy untuk dropdown
-  const kesatuanList = ['Kesatuan A', 'Kesatuan B', 'Kesatuan C', 'Kesatuan D'];
-  const subdisList = ['Subdis 1', 'Subdis 2', 'Subdis 3', 'Subdis 4'];
+  // Data dummy untuk dropdown (since API doesn't have these yet)
+  const kesatuanList = ['Mabes TNI', 'Puspen TNI', 'Babek TNI', 'Satsiber TNI'];
+  const subdisList = ['Subdis 1', 'Subdis 2'];
 
-  // Data pelari dummy
-  const pelariData: Pelari[] = [
-    {
-      id: 1,
-      pangkat: 'Lettu',
-      nama: 'Ahmad Fauzi',
-      email: 'ahmad.fauzi@mil.id',
-      kesatuan: 'Kesatuan A',
-      subdis: 'Subdis 1',
-      totalSesi: 12,
-      totalJarak: 48.5,
-      statusTarget: 'Tercapai',
-      bergabung: '2024-01-15'
-    },
-    {
-      id: 2,
-      pangkat: 'Kapten',
-      nama: 'Budi Santoso',
-      email: 'budi.santoso@mil.id',
-      kesatuan: 'Kesatuan B',
-      subdis: 'Subdis 2',
-      totalSesi: 8,
-      totalJarak: 32.0,
-      statusTarget: 'Dalam Proses',
-      bergabung: '2024-02-01'
-    },
-    {
-      id: 3,
-      pangkat: 'Mayor',
-      nama: 'Candra Wijaya',
-      email: 'candra.wijaya@mil.id',
-      kesatuan: 'Kesatuan A',
-      subdis: 'Subdis 1',
-      totalSesi: 15,
-      totalJarak: 60.2,
-      statusTarget: 'Tercapai',
-      bergabung: '2024-01-10'
-    },
-    {
-      id: 4,
-      pangkat: 'Sertu',
-      nama: 'Dewi Lestari',
-      email: 'dewi.lestari@mil.id',
-      kesatuan: 'Kesatuan C',
-      subdis: 'Subdis 3',
-      totalSesi: 5,
-      totalJarak: 20.0,
-      statusTarget: 'Belum Mulai',
-      bergabung: '2024-03-05'
-    }
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch Runners
+        const runnersRes = await fetch(`${API_BASE}/api/runners`);
+        const runnersJson = await runnersRes.json();
+        const runners: ApiRunner[] = Array.isArray(runnersJson?.data) ? runnersJson.data : [];
+
+        // Fetch Targets
+        const targetsRes = await fetch(`${API_BASE}/api/targets/14km`);
+        const targetsJson = await targetsRes.json();
+        const targets: ApiTarget14[] = Array.isArray(targetsJson?.data) ? targetsJson.data : [];
+
+        // Map data
+        const mappedData: Pelari[] = runners.map((r) => {
+          const target = targets.find(t => t.id === r.id);
+
+          let statusTarget = "Belum Mulai";
+          if (target) {
+            if (target.distance_km >= 14 && target.validation_status === "validated") {
+              statusTarget = "Tercapai";
+            } else if (target.distance_km >= 14 && target.validation_status === "pending") {
+              // Technically reached distance but waiting validation. 
+              // Could be "Dalam Proses" or separate status. treating as "Dalam Proses" / Pending
+              statusTarget = "Dalam Proses";
+            } else {
+              statusTarget = "Dalam Proses";
+            }
+          } else {
+            // Check if any distance
+            const dist = Number(r.totalDistance ?? r.total_distance ?? 0);
+            if (dist > 0) statusTarget = "Dalam Proses";
+          }
+
+          const rank = r.rank || "-";
+
+          return {
+            id: r.id,
+            pangkat: rank,
+            nama: r.name,
+            email: makeEmail(r.name, rank),
+            kesatuan: "Mabes TNI", // Placeholder
+            subdis: "-",          // Placeholder
+            totalSesi: Number(r.totalSessions ?? r.total_sessions ?? 0),
+            totalJarak: Number(r.totalDistance ?? r.total_distance ?? 0),
+            statusTarget: statusTarget,
+            bergabung: formatDateID(r.createdAt ?? r.created_at ?? ""),
+          };
+        });
+
+        setPelariData(mappedData);
+
+      } catch (err) {
+        console.error("Failed to fetch data in DataPelari:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
 
   // Filter data
-  const filteredData = pelariData.filter(pelari => {
-    const matchNama = pelari.nama.toLowerCase().includes(searchNama.toLowerCase());
-    const matchKesatuan = !filterKesatuan || pelari.kesatuan === filterKesatuan;
-    const matchSubdis = !filterSubdis || pelari.subdis === filterSubdis;
-    const matchStatus = !filterStatus || pelari.statusTarget === filterStatus;
-    return matchNama && matchKesatuan && matchSubdis && matchStatus;
-  });
-
-
+  const filteredData = useMemo(() => {
+    return pelariData.filter(pelari => {
+      const matchNama = pelari.nama.toLowerCase().includes(searchNama.toLowerCase());
+      const matchKesatuan = !filterKesatuan || pelari.kesatuan === filterKesatuan;
+      const matchSubdis = !filterSubdis || pelari.subdis === filterSubdis;
+      const matchStatus = filterStatus === 'all' || !filterStatus || pelari.statusTarget === filterStatus;
+      return matchNama && matchKesatuan && matchSubdis && matchStatus;
+    });
+  }, [pelariData, searchNama, filterKesatuan, filterSubdis, filterStatus]);
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Data Pelari</h1>
-          <p className="text-gray-500">Kelola dan pantau seluruh data pelari terdaftar</p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="page-header">
+        <h1 className="page-title">Data Pelari</h1>
+        <p className="page-description">Kelola dan pantau seluruh data pelari terdaftar</p>
+      </div>
 
-        {/* Filters - Single Row */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="grid grid-cols-12 gap-4">
-            {/* Search Nama */}
-            <div className="col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cari Nama
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Cari nama pelari..."
-                  value={searchNama}
-                  onChange={(e) => setSearchNama(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
+      {/* Filters */}
+      <div className="bg-card rounded-xl border border-border shadow-sm p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
+          {/* Search Nama */}
+          <div className="col-span-1 sm:col-span-2 lg:col-span-3 space-y-2">
+            <Label>Cari Nama</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari nama pelari..."
+                value={searchNama}
+                onChange={(e) => setSearchNama(e.target.value)}
+                className="pl-9"
+              />
             </div>
+          </div>
 
-            {/* Filter Kesatuan */}
-            <div className="col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Kesatuan
-              </label>
-              <Popover open={openKesatuan} onOpenChange={setOpenKesatuan}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openKesatuan}
-                    className="w-full justify-between bg-white border-gray-300 hover:bg-gray-50 text-gray-900"
-                  >
-                    {filterKesatuan || "Semua Kesatuan"}
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Cari kesatuan..." />
-                    <CommandList>
-                      <CommandEmpty>Tidak ada kesatuan.</CommandEmpty>
-                      <CommandGroup>
+          {/* Filter Kesatuan */}
+          <div className="col-span-1 sm:col-span-2 lg:col-span-3 space-y-2">
+            <Label>Kesatuan</Label>
+            <Popover open={openKesatuan} onOpenChange={setOpenKesatuan}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openKesatuan}
+                  className="w-full justify-between font-normal"
+                >
+                  {filterKesatuan || "Semua Kesatuan"}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0">
+                <Command>
+                  <CommandInput placeholder="Cari kesatuan..." />
+                  <CommandList>
+                    <CommandEmpty>Tidak ada kesatuan.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value=""
+                        onSelect={() => {
+                          setFilterKesatuan("");
+                          setOpenKesatuan(false);
+                        }}
+                      >
+                        Semua Kesatuan
+                      </CommandItem>
+                      {kesatuanList.map((kesatuan) => (
                         <CommandItem
-                          value=""
-                          onSelect={() => {
-                            setFilterKesatuan("");
+                          key={kesatuan}
+                          value={kesatuan}
+                          onSelect={(currentValue) => {
+                            setFilterKesatuan(currentValue === filterKesatuan ? "" : currentValue);
                             setOpenKesatuan(false);
                           }}
                         >
-                          Semua Kesatuan
+                          {kesatuan}
                         </CommandItem>
-                        {kesatuanList.map((kesatuan) => (
-                          <CommandItem
-                            key={kesatuan}
-                            value={kesatuan}
-                            onSelect={(currentValue) => {
-                              setFilterKesatuan(currentValue === filterKesatuan ? "" : currentValue);
-                              setOpenKesatuan(false);
-                            }}
-                          >
-                            {kesatuan}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
 
-            {/* Filter Subdis */}
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Subdis
-              </label>
-              <Popover open={openSubdis} onOpenChange={setOpenSubdis}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openSubdis}
-                    className="w-full justify-between bg-white border-gray-300 hover:bg-gray-50 text-gray-900"
-                  >
-                    {filterSubdis || "Semua Subdis"}
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Cari subdis..." />
-                    <CommandList>
-                      <CommandEmpty>Tidak ada subdis.</CommandEmpty>
-                      <CommandGroup>
+          {/* Filter Subdis */}
+          <div className="col-span-1 sm:col-span-2 lg:col-span-2 space-y-2">
+            <Label>Subdis</Label>
+            <Popover open={openSubdis} onOpenChange={setOpenSubdis}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openSubdis}
+                  className="w-full justify-between font-normal"
+                >
+                  {filterSubdis || "Semua Subdis"}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0">
+                <Command>
+                  <CommandInput placeholder="Cari subdis..." />
+                  <CommandList>
+                    <CommandEmpty>Tidak ada subdis.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value=""
+                        onSelect={() => {
+                          setFilterSubdis("");
+                          setOpenSubdis(false);
+                        }}
+                      >
+                        Semua Subdis
+                      </CommandItem>
+                      {subdisList.map((subdis) => (
                         <CommandItem
-                          value=""
-                          onSelect={() => {
-                            setFilterSubdis("");
+                          key={subdis}
+                          value={subdis}
+                          onSelect={(currentValue) => {
+                            setFilterSubdis(currentValue === filterSubdis ? "" : currentValue);
                             setOpenSubdis(false);
                           }}
                         >
-                          Semua Subdis
+                          {subdis}
                         </CommandItem>
-                        {subdisList.map((subdis) => (
-                          <CommandItem
-                            key={subdis}
-                            value={subdis}
-                            onSelect={(currentValue) => {
-                              setFilterSubdis(currentValue === filterSubdis ? "" : currentValue);
-                              setOpenSubdis(false);
-                            }}
-                          >
-                            {subdis}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
 
-            {/* Filter Status */}
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
-              </label>
-              <div className="relative">
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg appearance-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white cursor-pointer"
-                >
-                  <option value="">Semua Status</option>
-                  <option value="Tercapai">Tercapai</option>
-                  <option value="Dalam Proses">Dalam Proses</option>
-                  <option value="Belum Mulai">Belum Mulai</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
+          {/* Filter Status */}
+          <div className="col-span-1 sm:col-span-2 lg:col-span-2 space-y-2">
+            <Label>Status</Label>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="Tercapai">Tercapai</SelectItem>
+                <SelectItem value="Dalam Proses">Dalam Proses</SelectItem>
+                <SelectItem value="Belum Mulai">Belum Mulai</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-            {/* Export Button */}
-            <div className="col-span-2 flex items-end">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="w-full">
-                    <Download className="mr-2 h-4 w-4" />
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => alert("Export PDF")}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Export PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => alert("Export Excel")}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Export Excel
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+          {/* Export Button */}
+          <div className="col-span-1 sm:col-span-2 lg:col-span-2 flex items-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="w-full gap-2">
+                  <Download className="h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => alert("Export PDF")}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => alert("Export Excel")}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
+      </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+      {/* Table */}
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Pangkat</th>
+                <th>Nama</th>
+                <th>Email</th>
+                <th>Total Sesi</th>
+                <th>Total Jarak</th>
+                <th>Status Target</th>
+                <th>Bergabung</th>
+                <th className="text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pangkat
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nama
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Sesi
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Jarak
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status Target
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Bergabung
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aksi
-                  </th>
+                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Memuat data...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredData.length > 0 ? (
-                  filteredData.map((pelari) => (
-                    <tr key={pelari.id} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {pelari.pangkat}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pelari.nama}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {pelari.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pelari.totalSesi}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pelari.totalJarak} km
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${pelari.statusTarget === 'Tercapai'
-                          ? 'bg-green-100 text-green-800'
-                          : pelari.statusTarget === 'Dalam Proses'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                          }`}>
-                          {pelari.statusTarget}
+              ) : filteredData.length > 0 ? (
+                filteredData.map((pelari) => (
+                  <tr key={pelari.id}>
+                    <td className="font-medium text-sm text-foreground">{pelari.pangkat}</td>
+                    <td className="font-medium text-foreground">{pelari.nama}</td>
+                    <td className="text-muted-foreground">{pelari.email}</td>
+                    <td className="text-foreground">{pelari.totalSesi}</td>
+                    <td className="font-semibold text-primary">{(pelari.totalJarak || 0).toFixed(2)} km</td>
+                    <td>
+                      {pelari.statusTarget === 'Tercapai' ? (
+                        <span className="badge-success">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Tercapai
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {pelari.bergabung}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button className="text-blue-600 hover:text-blue-800 font-medium">
-                          Detail
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                      Tidak ada data.
+                      ) : pelari.statusTarget === 'Dalam Proses' ? (
+                        <span className="badge-warning">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Dalam Proses
+                        </span>
+                      ) : (
+                        <span className="badge-pending">
+                          <AlertCircle className="mr-1 h-3 w-3" />
+                          Belum Mulai
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-muted-foreground">{pelari.bergabung}</td>
+                    <td className="text-right">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link to={`/pelari/${pelari.id}`}>
+                          <Eye className="h-4 w-4" />
+                          <span className="sr-only">Detail</span>
+                        </Link>
+                      </Button>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Tidak ada data pelari yang ditemukan.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {/* Pagination */}
-          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-700">
-                Menampilkan {filteredData.length} dari {pelariData.length} pelari
-              </p>
-              <div className="flex space-x-2">
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 transition">
-                  ‹
-                </button>
-                <button className="px-3 py-1 bg-green-600 text-white rounded">
-                  1
-                </button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 transition">
-                  2
-                </button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 transition">
-                  3
-                </button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 transition">
-                  ›
-                </button>
-              </div>
-            </div>
+        {/* Pagination */}
+        <div className="px-5 py-4 border-t border-border flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Menampilkan {filteredData.length} dari {pelariData.length} pelari
+          </p>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm" disabled>
+              ‹
+            </Button>
+            <Button variant="default" size="sm" className="h-8 w-8 p-0">
+              1
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              2
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              3
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              ›
+            </Button>
           </div>
         </div>
       </div>
