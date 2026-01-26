@@ -1,5 +1,25 @@
 import { useState } from 'react';
-import { Search, Download, ChevronDown } from 'lucide-react';
+import { Search, Download, ChevronDown, FileText, FileSpreadsheet } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface Pelari {
   id: number;
@@ -19,6 +39,8 @@ const DataPelari = () => {
   const [filterKesatuan, setFilterKesatuan] = useState('');
   const [filterSubdis, setFilterSubdis] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [openKesatuan, setOpenKesatuan] = useState(false);
+  const [openSubdis, setOpenSubdis] = useState(false);
 
   // Data dummy untuk dropdown
   const kesatuanList = ['Kesatuan A', 'Kesatuan B', 'Kesatuan C', 'Kesatuan D'];
@@ -85,10 +107,7 @@ const DataPelari = () => {
     return matchNama && matchKesatuan && matchSubdis && matchStatus;
   });
 
-  const handleExport = () => {
-    console.log('Exporting data...');
-    alert('Fitur export akan segera tersedia');
-  };
+
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -124,19 +143,50 @@ const DataPelari = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kesatuan
               </label>
-              <div className="relative">
-                <select
-                  value={filterKesatuan}
-                  onChange={(e) => setFilterKesatuan(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg appearance-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white cursor-pointer"
-                >
-                  <option value="">Semua Kesatuan</option>
-                  {kesatuanList.map((k) => (
-                    <option key={k} value={k}>{k}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+              <Popover open={openKesatuan} onOpenChange={setOpenKesatuan}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openKesatuan}
+                    className="w-full justify-between bg-white border-gray-300 hover:bg-gray-50 text-gray-900"
+                  >
+                    {filterKesatuan || "Semua Kesatuan"}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Cari kesatuan..." />
+                    <CommandList>
+                      <CommandEmpty>Tidak ada kesatuan.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value=""
+                          onSelect={() => {
+                            setFilterKesatuan("");
+                            setOpenKesatuan(false);
+                          }}
+                        >
+                          Semua Kesatuan
+                        </CommandItem>
+                        {kesatuanList.map((kesatuan) => (
+                          <CommandItem
+                            key={kesatuan}
+                            value={kesatuan}
+                            onSelect={(currentValue) => {
+                              setFilterKesatuan(currentValue === filterKesatuan ? "" : currentValue);
+                              setOpenKesatuan(false);
+                            }}
+                          >
+                            {kesatuan}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Filter Subdis */}
@@ -144,19 +194,50 @@ const DataPelari = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Subdis
               </label>
-              <div className="relative">
-                <select
-                  value={filterSubdis}
-                  onChange={(e) => setFilterSubdis(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg appearance-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white cursor-pointer"
-                >
-                  <option value="">Semua Subdis</option>
-                  {subdisList.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+              <Popover open={openSubdis} onOpenChange={setOpenSubdis}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openSubdis}
+                    className="w-full justify-between bg-white border-gray-300 hover:bg-gray-50 text-gray-900"
+                  >
+                    {filterSubdis || "Semua Subdis"}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Cari subdis..." />
+                    <CommandList>
+                      <CommandEmpty>Tidak ada subdis.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value=""
+                          onSelect={() => {
+                            setFilterSubdis("");
+                            setOpenSubdis(false);
+                          }}
+                        >
+                          Semua Subdis
+                        </CommandItem>
+                        {subdisList.map((subdis) => (
+                          <CommandItem
+                            key={subdis}
+                            value={subdis}
+                            onSelect={(currentValue) => {
+                              setFilterSubdis(currentValue === filterSubdis ? "" : currentValue);
+                              setOpenSubdis(false);
+                            }}
+                          >
+                            {subdis}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Filter Status */}
@@ -181,13 +262,24 @@ const DataPelari = () => {
 
             {/* Export Button */}
             <div className="col-span-2 flex items-end">
-              <button 
-                onClick={handleExport}
-                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="w-full">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => alert("Export PDF")}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Export PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => alert("Export Excel")}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Export Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -244,13 +336,12 @@ const DataPelari = () => {
                         {pelari.totalJarak} km
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                          pelari.statusTarget === 'Tercapai' 
-                            ? 'bg-green-100 text-green-800' 
-                            : pelari.statusTarget === 'Dalam Proses'
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${pelari.statusTarget === 'Tercapai'
+                          ? 'bg-green-100 text-green-800'
+                          : pelari.statusTarget === 'Dalam Proses'
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-gray-100 text-gray-800'
-                        }`}>
+                          }`}>
                           {pelari.statusTarget}
                         </span>
                       </td>
