@@ -162,9 +162,9 @@ const Target14KM = () => {
           pace: r.pace ?? "0:00/km",
           achievedDate: formatDateID(r.achieved_date),
           achievedDateRaw: r.achieved_date,
-          validationStatus: r.validation_status,
-          kesatuan: r.kesatuan ?? "Kesatuan A",
-          subdis: r.subdis ?? "Subdis 1",
+          validationStatus: r.validation_status || "pending",
+          kesatuan: r.kesatuan ?? "-",
+          subdis: r.subdis ?? "-",
         }));
 
         if (!cancelled) setTargetRunners(mapped);

@@ -11,20 +11,46 @@ router.get("/14km", async (_req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        t.runner_id AS id,
-        r.name,
-        r.rank,
-        t.distance_km,
-        t.time_taken,
-        t.pace,
-        t.achieved_date,
-        t.validation_status
-      FROM target_14km t
-      JOIN runners r ON r.id = t.runner_id
-      ORDER BY t.achieved_date DESC, t.distance_km DESC
+        rs.id AS id,
+        u.name,
+        u.pangkat AS rank,
+        rs.distance_km,
+        rs.duration_sec,
+        rs.date_created AS achieved_date,
+        rs.validation_status,
+        u.kesatuan
+      FROM run_sessions rs
+      JOIN users u ON u.id = rs.user_id
+      WHERE rs.distance_km >= 14
+      ORDER BY rs.date_created DESC
     `);
 
-    res.json({ data: result.rows });
+    // Transform data to match frontend expectations
+    const data = result.rows.map((row) => {
+      // Calculate time_taken (HH:MM:SS)
+      const duration = row.duration_sec || 0;
+      const hours = Math.floor(duration / 3600);
+      const minutes = Math.floor((duration % 3600) / 60);
+      const seconds = duration % 60;
+      const time_taken = `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
+      // Calculate pace (min/km)
+      const distance = row.distance_km || 1;
+      const paceVal = duration / 60 / distance;
+      const paceMin = Math.floor(paceVal);
+      const paceSec = Math.round((paceVal - paceMin) * 60);
+      const pace = `${paceMin}'${paceSec.toString().padStart(2, "0")}"/km`;
+
+      return {
+        ...row,
+        // Frontend expects these fields
+        time_taken,
+        pace,
+        subdis: null, // subdis not available in users table
+      };
+    });
+
+    res.json({ data });
   } catch (err) {
     console.error("GET /api/targets/14km error:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -38,8 +64,9 @@ router.get("/14km", async (_req, res) => {
 router.post("/14km/validate/:id", async (req, res) => {
   const { id } = req.params;
   try {
+    // Validasi run_session instead of target_14km
     const result = await pool.query(
-      "UPDATE target_14km SET validation_status = 'validated' WHERE id = $1 RETURNING *",
+      "UPDATE run_sessions SET validation_status = 'validated' WHERE id = $1 RETURNING *",
       [id]
     );
 
